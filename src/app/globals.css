@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 224 38% 5%;
+    --foreground: 210 40% 98%;
+
+    --card: 224 32% 7%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 224 36% 6%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 155 78% 45%;
+    --primary-foreground: 224 50% 5%;
+
+    --secondary: 214 92% 56%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 224 18% 14%;
+    --muted-foreground: 218 18% 65%;
+
+    --accent: 190 95% 48%;
+    --accent-foreground: 224 50% 8%;
+
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 224 24% 16%;
+    --input: 224 24% 14%;
+    --ring: 199 95% 60%;
+
+    --radius: 0.85rem;
+
+    --signal-neutral: 199 95% 60%;
+    --signal-positive: 152 75% 50%;
+    --signal-warning: 38 95% 58%;
+    --signal-danger: 350 88% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background:
+      radial-gradient(60% 50% at 12% 0%, hsla(214, 95%, 50%, 0.14) 0%, transparent 60%),
+      radial-gradient(50% 40% at 100% 10%, hsla(151, 90%, 45%, 0.10) 0%, transparent 60%),
+      radial-gradient(70% 60% at 50% 100%, hsla(220, 80%, 30%, 0.10) 0%, transparent 60%),
+      hsl(var(--background));
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .glass {
+    background:
+      linear-gradient(180deg, hsla(220, 30%, 12%, 0.65), hsla(220, 30%, 8%, 0.55));
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid hsla(220, 30%, 60%, 0.10);
+    box-shadow:
+      0 1px 0 0 hsla(220, 60%, 90%, 0.04) inset,
+      0 30px 60px -30px hsla(220, 80%, 5%, 0.65);
+  }
+
+  .glass-strong {
+    background:
+      linear-gradient(180deg, hsla(220, 30%, 14%, 0.85), hsla(220, 30%, 8%, 0.80));
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border: 1px solid hsla(220, 30%, 70%, 0.12);
+  }
+
+  .gradient-text {
+    background: linear-gradient(120deg, #3b82f6 0%, #06b6d4 48%, #10b981 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(hsla(220, 30%, 60%, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, hsla(220, 30%, 60%, 0.05) 1px, transparent 1px);
+    background-size: 32px 32px;
+    mask-image: radial-gradient(60% 50% at 50% 30%, black 30%, transparent 80%);
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted));
+    border-radius: 8px;
+  }
+
+  .pulse-dot {
+    @apply relative inline-flex h-2 w-2 rounded-full;
+  }
+
+  .pulse-dot::before {
+    content: "";
+    @apply absolute inset-0 rounded-full opacity-60 animate-ping;
+    background: currentColor;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-space-grotesk), var(--font-manrope), sans-serif;
+    letter-spacing: -0.025em;
+  }
+  ::selection { background: hsla(155, 78%, 45%, 0.28); color: hsl(var(--foreground)); }
+}

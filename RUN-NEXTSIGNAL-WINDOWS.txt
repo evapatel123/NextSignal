@@ -1,0 +1,32 @@
+NEXTSIGNAL — WINDOWS QUICK START
+
+The project includes a .env file already configured for live public market data.
+No API keys are required for the included Polymarket and Kalshi read-only feeds.
+
+1) Open PowerShell in the NextSignalMain folder.
+2) Install Python dependencies:
+   py -m pip install -r requirements.txt
+3) Start the backend (leave this terminal running):
+   py -m uvicorn src.server.main:app --reload --port 8000
+4) Open a SECOND terminal in the same NextSignalMain folder.
+5) Install frontend dependencies if needed:
+   pnpm install
+6) Start the website:
+   pnpm dev
+7) Open http://localhost:3000
+
+Backend API docs: http://localhost:8000/docs
+
+To refresh the live market list manually, use POST /api/admin/sync in the API docs.
+
+IMPORTANT
+- Keep both terminal windows open while using the local app.
+- The app needs internet access to fetch live market data.
+- If both providers are unavailable, the backend reports an error instead of pretending
+  sample/demo data is live.
+- Live current market prices are included; a verified long-term historical series,
+  validated calibration from resolved outcomes, and guaranteed arbitrage detection are not.
+
+Automatic live refresh
+----------------------
+When you open or hard-refresh the NextSignal web app, it now requests a live sync from the backend automatically and refreshes the dashboard queries after that sync completes. You do not need to open /docs or manually call the sync endpoint. The backend's scheduled refresh remains enabled every 5 minutes by default.

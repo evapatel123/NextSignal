@@ -1,0 +1,40 @@
+NextSignal — deployment notes
+
+IMPORTANT: This project has a Next.js frontend AND a FastAPI/Python backend.
+Deploying the frontend to Vercel does not deploy the FastAPI service automatically.
+Host the Python API on a Python-capable host (for example Render, Railway, or another
+ASGI host), configure persistent storage/Postgres for the backend, and then set the
+Vercel environment variable BACKEND_URL to that deployed API origin. NEXT_PUBLIC_BACKEND_BASE
+should remain /api/backend when using the Next.js rewrite proxy.
+
+Before production:
+1. Configure a persistent database. Do not use SQLite on an ephemeral/serverless filesystem.
+2. Set ENABLE_LIVE_INGEST=true and AUTO_SEED=true on the backend service.
+3. Set CORS_ORIGINS to your exact frontend origin(s) if calling the backend directly.
+4. Deploy the Next.js app to Vercel and set BACKEND_URL to the deployed backend origin.
+5. Call POST /api/admin/sync and verify GET /api/health, GET /api/sources, and GET /api/events.
+6. Confirm source timestamps advance and the event URLs point to the original providers.
+
+Data integrity notes:
+- Live adapters request current public Polymarket and Kalshi market listings. Provider availability,
+  rate limits, and API response changes can affect live ingestion.
+- A market listing is not the same as a validated forecast. Calibration/Brier/bias metrics must
+  remain unavailable until genuine resolved outcomes exist. Current code does not manufacture
+  resolved outcomes to fill those metrics.
+- A single snapshot cannot measure historical drift. Repeat observations over time are required.
+- Cross-platform divergence is meaningful only when equivalent markets are reliably matched.
+- Never describe a market as mispriced solely because the heuristic score is high; it is a research
+  signal, not a guaranteed edge or investment advice.
+
+Local Windows startup instructions are in RUN-NEXTSIGNAL-WINDOWS.txt.
+
+Final pre-deploy fixes in this build:
+- Timezone-less API timestamps are interpreted as UTC by the frontend; future clock skew is never shown as negative elapsed seconds.
+- A provider that fails its fetch is visible as degraded and is not given a successful-sync timestamp.
+- Overall health is degraded when any configured live provider is degraded.
+- Cross-source grouping uses normalized exact titles rather than provider-specific market IDs/slugs. This is conservative and does not claim semantic equivalence; review matched markets before relying on divergence.
+- Live refresh now upserts current market rows and appends actual price snapshots instead of deleting prior snapshots. Drift becomes meaningful only after at least two real observations for a market.
+- The backend reports `data_mode` as `live` or `demo`; the header must not label bundled fixture data as Live.
+- When live ingestion is enabled, the backend runs a single-process periodic refresh every five minutes by default (`AUTO_SYNC=true`, `AUTO_SYNC_INTERVAL_MINUTES=5`). Use one backend worker or move scheduling to a dedicated worker to avoid duplicate scheduled refreshes.
+- Run `py -m src.server.scripts.verify_live` from the project root to check public provider connectivity before deployment. A successful local test suite does not prove your hosting environment can reach external providers.
+- This execution environment has restricted DNS/network access, so the live provider connectivity test could not pass here. It must be run on the user's computer or deployed backend before claiming live feed verification.

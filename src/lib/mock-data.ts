@@ -1,0 +1,747 @@
+import type {
+  AlertsResponse,
+  CalibrationResponse,
+  EventDetailResponse,
+  EventListResponse,
+  EventSummary,
+  HealthResponse,
+  InsightItem,
+  OddsPoint,
+  PlatformQuote,
+  SourcesResponse,
+  SummaryMetrics,
+} from "./types";
+
+const NOW = new Date();
+
+function iso(daysAgo: number, hourOffset = 0): string {
+  const d = new Date(NOW);
+  d.setDate(d.getDate() - daysAgo);
+  d.setHours(d.getHours() - hourOffset);
+  return d.toISOString();
+}
+
+interface MockEvent extends EventSummary {
+  description: string;
+  url: string;
+  signal_explanation: string;
+  brier_score: number;
+  calibration_error: number;
+  outcome: number | null;
+  history: OddsPoint[];
+  related_slugs: string[];
+}
+
+function genHistory(final: number, days: number, seed: number, source: string): OddsPoint[] {
+  const out: OddsPoint[] = [];
+  let p = Math.max(0.05, Math.min(0.95, final + (((seed % 7) - 3) / 25)));
+  for (let i = days; i >= 0; i--) {
+    const noise = ((Math.sin(seed * 0.7 + i) + Math.cos(seed * 0.3 + i * 1.7)) / 2) * 0.05;
+    const pull = (final - p) * 0.18;
+    p = Math.max(0.02, Math.min(0.98, p + pull + noise));
+    out.push({ timestamp: iso(i), probability: Number(p.toFixed(4)), source });
+  }
+  return out;
+}
+
+const MOCK_EVENTS: MockEvent[] = [
+  // Fed cut event (3 platforms)
+  {
+    id: "evt_polymarket_pm-2026-fed-cut-q2",
+    title: "Will the Fed cut rates by July 2026 FOMC?",
+    slug: "fed-cut-rates-by-july-2026",
+    category: "economics",
+    status: "active",
+    source: "polymarket",
+    source_display: "Polymarket",
+    current_probability: 0.62,
+    adjusted_probability: 0.58,
+    edge_score: 0.21,
+    divergence_score: 0.16,
+    drift_score: 0.32,
+    signal_label: "overconfident",
+    resolution_date: "2026-07-31T23:59:00Z",
+    volume: 4250000,
+    liquidity: 380000,
+    description:
+      "Resolves YES if the U.S. Federal Reserve announces a rate cut at or before the July 2026 FOMC meeting.",
+    url: "https://polymarket.com/event/fed-cut-rates-july-2026",
+    signal_explanation:
+      "Calibrated estimate is 4.0 pts below the Polymarket quote of 62%. Recent odds drift is moderate; cross-platform divergence is contained.",
+    brier_score: 0.18,
+    calibration_error: 0.04,
+    outcome: null,
+    history: genHistory(0.62, 21, 11, "polymarket"),
+    related_slugs: ["us-recession-2026", "us-house-democrats-2026"],
+  },
+  {
+    id: "evt_kalshi_ks-fed-cut-jul-26",
+    title: "Fed cuts rates at or before July 2026 FOMC",
+    slug: "fed-cut-rates-by-july-2026",
+    category: "economics",
+    status: "active",
+    source: "kalshi",
+    source_display: "Kalshi",
+    current_probability: 0.58,
+    adjusted_probability: 0.56,
+    edge_score: 0.14,
+    divergence_score: 0.16,
+    drift_score: 0.18,
+    signal_label: "neutral",
+    resolution_date: "2026-07-31T23:59:00Z",
+    volume: 2750000,
+    liquidity: 220000,
+    description: "Federal Reserve announces a target rate cut on or before July 30, 2026 FOMC.",
+    url: "https://kalshi.com/markets/fed-jul-2026",
+    signal_explanation: "Markets agree and movement is stable; no actionable edge detected.",
+    brier_score: 0.16,
+    calibration_error: 0.02,
+    outcome: null,
+    history: genHistory(0.58, 21, 12, "kalshi"),
+    related_slugs: ["us-recession-2026"],
+  },
+  {
+    id: "evt_metaculus_mc-fed-2026-cut",
+    title: "Will the U.S. Federal Reserve cut its policy rate by July 2026?",
+    slug: "fed-cut-rates-by-july-2026",
+    category: "economics",
+    status: "active",
+    source: "metaculus",
+    source_display: "Metaculus",
+    current_probability: 0.6,
+    adjusted_probability: 0.58,
+    edge_score: 0.12,
+    divergence_score: 0.16,
+    drift_score: 0.14,
+    signal_label: "neutral",
+    resolution_date: "2026-07-31T23:59:00Z",
+    volume: 0,
+    liquidity: 0,
+    description: "Community forecast on Fed policy rate move at or before July 2026 FOMC.",
+    url: "https://metaculus.com/questions/fed-jul-2026",
+    signal_explanation: "Markets agree and movement is stable; no actionable edge detected.",
+    brier_score: 0.15,
+    calibration_error: 0.02,
+    outcome: null,
+    history: genHistory(0.6, 22, 13, "metaculus"),
+    related_slugs: [],
+  },
+  // House control
+  {
+    id: "evt_polymarket_pm-2026-elec-house-control",
+    title: "Will Democrats control the U.S. House after 2026 midterms?",
+    slug: "us-house-democrats-2026",
+    category: "politics",
+    status: "active",
+    source: "polymarket",
+    source_display: "Polymarket",
+    current_probability: 0.54,
+    adjusted_probability: 0.5,
+    edge_score: 0.19,
+    divergence_score: 0.21,
+    drift_score: 0.41,
+    signal_label: "overconfident",
+    resolution_date: "2026-11-04T23:59:00Z",
+    volume: 9120000,
+    liquidity: 720000,
+    description:
+      "Resolves YES if the Democratic Party holds 218 or more seats in the U.S. House of Representatives following the 2026 midterm elections.",
+    url: "https://polymarket.com/event/us-house-democrats-2026",
+    signal_explanation:
+      "Calibrated estimate is 4.0 pts below the Polymarket quote of 54%. Politics historically overestimates YES outcomes by 6 pts.",
+    brier_score: 0.22,
+    calibration_error: 0.06,
+    outcome: null,
+    history: genHistory(0.54, 30, 21, "polymarket"),
+    related_slugs: [],
+  },
+  {
+    id: "evt_kalshi_ks-house-dem-2026",
+    title: "Democrats win majority in U.S. House 2026",
+    slug: "us-house-democrats-2026",
+    category: "politics",
+    status: "active",
+    source: "kalshi",
+    source_display: "Kalshi",
+    current_probability: 0.49,
+    adjusted_probability: 0.48,
+    edge_score: 0.18,
+    divergence_score: 0.21,
+    drift_score: 0.27,
+    signal_label: "neutral",
+    resolution_date: "2026-11-04T23:59:00Z",
+    volume: 5800000,
+    liquidity: 410000,
+    description: "Democratic Party wins 218 or more seats in the U.S. House.",
+    url: "https://kalshi.com/markets/house-dem-2026",
+    signal_explanation: "Cross-platform divergence is moderate; calibration is broadly aligned.",
+    brier_score: 0.19,
+    calibration_error: 0.03,
+    outcome: null,
+    history: genHistory(0.49, 30, 22, "kalshi"),
+    related_slugs: [],
+  },
+  {
+    id: "evt_metaculus_mc-house-dem-2026",
+    title: "Will Democrats control the U.S. House after the 2026 elections?",
+    slug: "us-house-democrats-2026",
+    category: "politics",
+    status: "active",
+    source: "metaculus",
+    source_display: "Metaculus",
+    current_probability: 0.51,
+    adjusted_probability: 0.5,
+    edge_score: 0.16,
+    divergence_score: 0.21,
+    drift_score: 0.22,
+    signal_label: "neutral",
+    resolution_date: "2026-11-04T23:59:00Z",
+    volume: 0,
+    liquidity: 0,
+    description: "Forecast for partisan control of the U.S. House post-2026 elections.",
+    url: "https://metaculus.com/questions/us-house-2026",
+    signal_explanation: "Markets agree and movement is stable.",
+    brier_score: 0.17,
+    calibration_error: 0.02,
+    outcome: null,
+    history: genHistory(0.51, 32, 23, "metaculus"),
+    related_slugs: [],
+  },
+  // BTC
+  {
+    id: "evt_polymarket_pm-2026-btc-100k-q3",
+    title: "Will Bitcoin close above $120,000 by September 30, 2026?",
+    slug: "bitcoin-120k-september-2026",
+    category: "crypto",
+    status: "active",
+    source: "polymarket",
+    source_display: "Polymarket",
+    current_probability: 0.41,
+    adjusted_probability: 0.36,
+    edge_score: 0.32,
+    divergence_score: 0.27,
+    drift_score: 0.61,
+    signal_label: "drifting",
+    resolution_date: "2026-09-30T23:59:00Z",
+    volume: 6840000,
+    liquidity: 510000,
+    description: "Resolves YES if BTC/USD daily close on Coinbase is at least $120,000 on or before Sept 30, 2026.",
+    url: "https://polymarket.com/event/btc-120k-september-2026",
+    signal_explanation:
+      "Odds have moved sharply in a short window, indicating fresh information. Calibrated estimate sits 5 pts below market.",
+    brier_score: 0.28,
+    calibration_error: 0.07,
+    outcome: null,
+    history: genHistory(0.41, 28, 31, "polymarket"),
+    related_slugs: [],
+  },
+  {
+    id: "evt_kalshi_ks-btc-120k-q3-2026",
+    title: "BTC closes above $120K by Sept 30, 2026",
+    slug: "bitcoin-120k-september-2026",
+    category: "crypto",
+    status: "active",
+    source: "kalshi",
+    source_display: "Kalshi",
+    current_probability: 0.36,
+    adjusted_probability: 0.34,
+    edge_score: 0.24,
+    divergence_score: 0.27,
+    drift_score: 0.49,
+    signal_label: "drifting",
+    resolution_date: "2026-09-30T23:59:00Z",
+    volume: 3120000,
+    liquidity: 280000,
+    description: "Bitcoin daily close at or above $120,000.",
+    url: "https://kalshi.com/markets/btc-120k-2026",
+    signal_explanation: "Recent odds drift is high; fresh signal is moving the market.",
+    brier_score: 0.26,
+    calibration_error: 0.05,
+    outcome: null,
+    history: genHistory(0.36, 28, 32, "kalshi"),
+    related_slugs: [],
+  },
+  // Recession
+  {
+    id: "evt_polymarket_pm-2026-recession-2026",
+    title: "Will the U.S. enter a recession in 2026?",
+    slug: "us-recession-2026",
+    category: "economics",
+    status: "active",
+    source: "polymarket",
+    source_display: "Polymarket",
+    current_probability: 0.27,
+    adjusted_probability: 0.31,
+    edge_score: 0.18,
+    divergence_score: 0.12,
+    drift_score: 0.22,
+    signal_label: "underpriced",
+    resolution_date: "2026-12-31T23:59:00Z",
+    volume: 3180000,
+    liquidity: 250000,
+    description: "Resolves YES if NBER declares a recession with start date in calendar year 2026.",
+    url: "https://polymarket.com/event/us-recession-2026",
+    signal_explanation:
+      "Adjusted probability is 4.0 pts above market — historical calibration suggests the market is underpricing this outcome.",
+    brier_score: 0.20,
+    calibration_error: 0.04,
+    outcome: null,
+    history: genHistory(0.27, 45, 41, "polymarket"),
+    related_slugs: ["fed-cut-rates-by-july-2026"],
+  },
+  {
+    id: "evt_kalshi_ks-recession-2026",
+    title: "U.S. recession declared in 2026",
+    slug: "us-recession-2026",
+    category: "economics",
+    status: "active",
+    source: "kalshi",
+    source_display: "Kalshi",
+    current_probability: 0.31,
+    adjusted_probability: 0.32,
+    edge_score: 0.10,
+    divergence_score: 0.12,
+    drift_score: 0.16,
+    signal_label: "neutral",
+    resolution_date: "2026-12-31T23:59:00Z",
+    volume: 1850000,
+    liquidity: 175000,
+    description: "NBER declares a U.S. recession beginning in 2026.",
+    url: "https://kalshi.com/markets/us-recession-2026",
+    signal_explanation: "Conditions are normal.",
+    brier_score: 0.18,
+    calibration_error: 0.02,
+    outcome: null,
+    history: genHistory(0.31, 45, 42, "kalshi"),
+    related_slugs: [],
+  },
+  // Starship
+  {
+    id: "evt_polymarket_pm-2026-spacex-starship-orbit",
+    title: "Will SpaceX successfully complete a Starship orbital refuel by Q4 2026?",
+    slug: "starship-orbit-refuel-2026",
+    category: "technology",
+    status: "active",
+    source: "polymarket",
+    source_display: "Polymarket",
+    current_probability: 0.46,
+    adjusted_probability: 0.41,
+    edge_score: 0.24,
+    divergence_score: 0.18,
+    drift_score: 0.45,
+    signal_label: "overconfident",
+    resolution_date: "2026-12-31T23:59:00Z",
+    volume: 980000,
+    liquidity: 140000,
+    description:
+      "Resolves YES if SpaceX demonstrates a successful Starship-to-Starship orbital propellant transfer before Dec 31, 2026.",
+    url: "https://polymarket.com/event/starship-refuel-2026",
+    signal_explanation:
+      "Adjusted probability is 5.0 pts below market — calibration history suggests the market is overconfident here.",
+    brier_score: 0.27,
+    calibration_error: 0.05,
+    outcome: null,
+    history: genHistory(0.46, 60, 51, "polymarket"),
+    related_slugs: [],
+  },
+  // 1T LLM
+  {
+    id: "evt_polymarket_pm-2026-ai-1t-param-open-source",
+    title: "Will a 1T+ parameter open-source LLM be released in 2026?",
+    slug: "open-source-1t-llm-2026",
+    category: "technology",
+    status: "active",
+    source: "polymarket",
+    source_display: "Polymarket",
+    current_probability: 0.33,
+    adjusted_probability: 0.3,
+    edge_score: 0.13,
+    divergence_score: 0.13,
+    drift_score: 0.21,
+    signal_label: "neutral",
+    resolution_date: "2026-12-31T23:59:00Z",
+    volume: 2380000,
+    liquidity: 195000,
+    description:
+      "Resolves YES if any organization publicly releases an open-weight LLM with at least one trillion parameters before Dec 31, 2026.",
+    url: "https://polymarket.com/event/open-source-1t-llm-2026",
+    signal_explanation: "Conditions are normal.",
+    brier_score: 0.17,
+    calibration_error: 0.03,
+    outcome: null,
+    history: genHistory(0.33, 40, 61, "polymarket"),
+    related_slugs: [],
+  },
+  // Resolved events for calibration
+  {
+    id: "evt_polymarket_pm-2025-gpt5-released",
+    title: "Did OpenAI release GPT-5 before March 2026?",
+    slug: "gpt-5-release-march-2026",
+    category: "technology",
+    status: "resolved",
+    source: "polymarket",
+    source_display: "Polymarket",
+    current_probability: 0.74,
+    adjusted_probability: 0.74,
+    edge_score: 0.0,
+    divergence_score: 0.0,
+    drift_score: 0.41,
+    signal_label: "neutral",
+    resolution_date: "2026-03-01T00:00:00Z",
+    volume: 5200000,
+    liquidity: 0,
+    description: "Resolved YES on Feb 18, 2026 with the public launch of GPT-5.",
+    url: "https://polymarket.com/event/gpt-5-march-2026",
+    signal_explanation: "Resolved YES.",
+    brier_score: 0.0676,
+    calibration_error: 0.26,
+    outcome: 1,
+    history: genHistory(0.74, 80, 71, "polymarket"),
+    related_slugs: [],
+  },
+  {
+    id: "evt_polymarket_pm-2025-spx-5500",
+    title: "Did the S&P 500 close above 5500 on Dec 31, 2025?",
+    slug: "spx-5500-eoy-2025",
+    category: "economics",
+    status: "resolved",
+    source: "polymarket",
+    source_display: "Polymarket",
+    current_probability: 0.41,
+    adjusted_probability: 0.41,
+    edge_score: 0.0,
+    divergence_score: 0.0,
+    drift_score: 0.27,
+    signal_label: "neutral",
+    resolution_date: "2025-12-31T23:59:00Z",
+    volume: 7100000,
+    liquidity: 0,
+    description: "Resolved NO. S&P 500 closed below 5500 on Dec 31, 2025.",
+    url: "https://polymarket.com/event/spx-5500-eoy-2025",
+    signal_explanation: "Resolved NO.",
+    brier_score: 0.1681,
+    calibration_error: 0.41,
+    outcome: 0,
+    history: genHistory(0.41, 90, 72, "polymarket"),
+    related_slugs: [],
+  },
+  {
+    id: "evt_kalshi_ks-cpi-march-26-above-3",
+    title: "U.S. March 2026 CPI YoY above 3.0%",
+    slug: "us-cpi-march-2026-above-3",
+    category: "economics",
+    status: "resolved",
+    source: "kalshi",
+    source_display: "Kalshi",
+    current_probability: 0.34,
+    adjusted_probability: 0.34,
+    edge_score: 0.0,
+    divergence_score: 0.0,
+    drift_score: 0.18,
+    signal_label: "neutral",
+    resolution_date: "2026-04-10T13:30:00Z",
+    volume: 2400000,
+    liquidity: 0,
+    description: "Resolved NO. CPI YoY printed at 2.8% in March 2026.",
+    url: "https://kalshi.com/markets/cpi-mar-2026",
+    signal_explanation: "Resolved NO.",
+    brier_score: 0.1156,
+    calibration_error: 0.34,
+    outcome: 0,
+    history: genHistory(0.34, 70, 73, "kalshi"),
+    related_slugs: [],
+  },
+  {
+    id: "evt_kalshi_ks-nfl-superbowl-mvp-qb",
+    title: "Super Bowl LX MVP is a quarterback",
+    slug: "super-bowl-lx-mvp-qb",
+    category: "sports",
+    status: "resolved",
+    source: "kalshi",
+    source_display: "Kalshi",
+    current_probability: 0.68,
+    adjusted_probability: 0.68,
+    edge_score: 0.0,
+    divergence_score: 0.0,
+    drift_score: 0.21,
+    signal_label: "neutral",
+    resolution_date: "2026-02-08T23:59:00Z",
+    volume: 4100000,
+    liquidity: 0,
+    description: "Resolved YES. Super Bowl LX MVP was a starting quarterback.",
+    url: "https://kalshi.com/markets/sb-lx-mvp-qb",
+    signal_explanation: "Resolved YES.",
+    brier_score: 0.1024,
+    calibration_error: 0.32,
+    outcome: 1,
+    history: genHistory(0.68, 100, 74, "kalshi"),
+    related_slugs: [],
+  },
+  {
+    id: "evt_metaculus_mc-fed-mar-26-cut",
+    title: "Did the Fed cut rates at the March 2026 FOMC meeting?",
+    slug: "fed-mar-26-cut",
+    category: "economics",
+    status: "resolved",
+    source: "metaculus",
+    source_display: "Metaculus",
+    current_probability: 0.59,
+    adjusted_probability: 0.59,
+    edge_score: 0.0,
+    divergence_score: 0.0,
+    drift_score: 0.31,
+    signal_label: "neutral",
+    resolution_date: "2026-03-19T18:00:00Z",
+    volume: 0,
+    liquidity: 0,
+    description: "Resolved YES. The Fed announced a 25 bp cut at the March 2026 FOMC.",
+    url: "https://metaculus.com/questions/fed-mar-2026",
+    signal_explanation: "Resolved YES.",
+    brier_score: 0.1681,
+    calibration_error: 0.41,
+    outcome: 1,
+    history: genHistory(0.59, 45, 75, "metaculus"),
+    related_slugs: [],
+  },
+  // Misc
+  {
+    id: "evt_kalshi_ks-eu-summit-ukraine-aid",
+    title: "EU passes new Ukraine aid package by June 30, 2026",
+    slug: "eu-ukraine-aid-jun-2026",
+    category: "geopolitics",
+    status: "active",
+    source: "kalshi",
+    source_display: "Kalshi",
+    current_probability: 0.71,
+    adjusted_probability: 0.69,
+    edge_score: 0.09,
+    divergence_score: 0.05,
+    drift_score: 0.12,
+    signal_label: "neutral",
+    resolution_date: "2026-06-30T23:59:00Z",
+    volume: 410000,
+    liquidity: 78000,
+    description: "European Union approves a new Ukraine aid package on or before June 30, 2026.",
+    url: "https://kalshi.com/markets/eu-ukraine-aid-2026",
+    signal_explanation: "Conditions are normal.",
+    brier_score: 0.13,
+    calibration_error: 0.02,
+    outcome: null,
+    history: genHistory(0.71, 50, 81, "kalshi"),
+    related_slugs: [],
+  },
+  {
+    id: "evt_polymarket_pm-2026-uk-pm-2026",
+    title: "Will Keir Starmer remain UK Prime Minister through end of 2026?",
+    slug: "starmer-pm-end-2026",
+    category: "politics",
+    status: "active",
+    source: "polymarket",
+    source_display: "Polymarket",
+    current_probability: 0.78,
+    adjusted_probability: 0.74,
+    edge_score: 0.12,
+    divergence_score: 0.08,
+    drift_score: 0.09,
+    signal_label: "overconfident",
+    resolution_date: "2026-12-31T23:59:00Z",
+    volume: 1450000,
+    liquidity: 210000,
+    description: "Resolves YES if Keir Starmer is still serving as Prime Minister of the United Kingdom on Dec 31, 2026.",
+    url: "https://polymarket.com/event/starmer-pm-2026",
+    signal_explanation:
+      "Adjusted probability is 4 pts below market. Politics historically overestimates YES outcomes by 6 pts.",
+    brier_score: 0.17,
+    calibration_error: 0.04,
+    outcome: null,
+    history: genHistory(0.78, 35, 91, "polymarket"),
+    related_slugs: [],
+  },
+];
+
+const SOURCES: SourcesResponse = {
+  sources: [
+    { id: "src_polymarket", name: "polymarket", display_name: "Polymarket", status: "ok", last_sync_at: NOW.toISOString() },
+    { id: "src_kalshi", name: "kalshi", display_name: "Kalshi", status: "ok", last_sync_at: NOW.toISOString() },
+    { id: "src_metaculus", name: "metaculus", display_name: "Metaculus", status: "ok", last_sync_at: NOW.toISOString() },
+  ],
+};
+
+function toSummary(e: MockEvent): EventSummary {
+  // strip mock-only fields
+  const { description: _d, url: _u, history: _h, related_slugs: _r, signal_explanation: _se, brier_score: _bs, calibration_error: _ce, outcome: _o, ...rest } = e;
+  return rest;
+}
+
+export const mockApi = {
+  health: async (): Promise<HealthResponse> => ({
+    status: "ok",
+    db: "mock",
+    data_mode: "demo",
+    last_sync_at: NOW.toISOString(),
+    version: "0.1.0-mock",
+  }),
+  sources: async (): Promise<SourcesResponse> => SOURCES,
+  events: async (params?: Record<string, any>): Promise<EventListResponse> => {
+    const page = Number(params?.page || 1);
+    const limit = Number(params?.limit || 20);
+    let items = MOCK_EVENTS.slice();
+    if (params?.source) items = items.filter((e) => e.source === params.source);
+    if (params?.category) items = items.filter((e) => e.category === params.category);
+    if (params?.status) items = items.filter((e) => e.status === params.status);
+    if (params?.search) {
+      const s = String(params.search).toLowerCase();
+      items = items.filter((e) => e.title.toLowerCase().includes(s) || e.description.toLowerCase().includes(s));
+    }
+    const sortBy = (params?.sort_by as string) || "edge_score";
+    const order = params?.sort_order === "asc" ? 1 : -1;
+    items.sort((a: any, b: any) => ((a[sortBy] ?? 0) - (b[sortBy] ?? 0)) * order);
+    const total = items.length;
+    const slice = items.slice((page - 1) * limit, page * limit);
+    return { items: slice.map(toSummary), page, limit, total };
+  },
+  event: async (id: string): Promise<EventDetailResponse> => {
+    const ev = MOCK_EVENTS.find((e) => e.id === id) || MOCK_EVENTS[0];
+    const platforms: PlatformQuote[] = MOCK_EVENTS.filter((e) => e.slug === ev.slug).map((e) => ({
+      source: e.source,
+      source_display: e.source_display,
+      probability: e.current_probability,
+      last_updated: NOW.toISOString(),
+      volume: e.volume,
+    }));
+    const related = MOCK_EVENTS.filter(
+      (e) => e.id !== ev.id && (e.slug === ev.slug || e.category === ev.category),
+    )
+      .slice(0, 6)
+      .map(toSummary);
+    return {
+      event: { ...toSummary(ev), description: ev.description, url: ev.url, signal_explanation: ev.signal_explanation, brier_score: ev.brier_score, calibration_error: ev.calibration_error, outcome: ev.outcome },
+      history: ev.history,
+      platforms,
+      related_events: related,
+    };
+  },
+  summary: async (): Promise<SummaryMetrics> => {
+    const total = MOCK_EVENTS.length;
+    const active = MOCK_EVENTS.filter((e) => e.status === "active").length;
+    const resolved = MOCK_EVENTS.filter((e) => e.status === "resolved").length;
+    const flagged = MOCK_EVENTS.filter((e) => e.signal_label !== "neutral").length;
+    const avg = (key: keyof MockEvent) =>
+      MOCK_EVENTS.reduce((acc, e) => acc + (e[key] as number), 0) / MOCK_EVENTS.length;
+    return {
+      total_events: total,
+      active_events: active,
+      resolved_events: resolved,
+      flagged_events: flagged,
+      avg_brier_score: Number(avg("brier_score").toFixed(4)),
+      avg_calibration_error: Number(avg("calibration_error").toFixed(4)),
+      avg_drift: Number(avg("drift_score").toFixed(4)),
+      avg_divergence: Number(avg("divergence_score").toFixed(4)),
+      sources: 3,
+    };
+  },
+  insights: async (): Promise<{ items: InsightItem[] }> => ({
+    items: [
+      {
+        id: "best-calibrated",
+        icon: "trophy",
+        title: "Metaculus is best calibrated",
+        body: "Lowest mean Brier score (0.168) across resolved events in our sample.",
+        metric: "Brier 0.168",
+        tone: "positive",
+      },
+      {
+        id: "biased-category",
+        icon: "trend",
+        title: "Politics markets overestimate YES",
+        body: "Average bias of +6.4 pts across resolved political events — markets lean optimistic.",
+        metric: "Bias +6.4%",
+        tone: "warning",
+      },
+      {
+        id: "top-divergence",
+        icon: "diff",
+        title: "Sharpest cross-market disagreement",
+        body: "Bitcoin $120K Q3 shows 0.27 divergence between Polymarket and Kalshi.",
+        metric: "Δ 0.27",
+        tone: "warning",
+      },
+      {
+        id: "top-edge",
+        icon: "alert",
+        title: "Top mispricing signal",
+        body: "Bitcoin $120K Q3 flagged as drifting with edge 0.32.",
+        metric: "Edge 0.32",
+        tone: "danger",
+      },
+      {
+        id: "activity",
+        icon: "pulse",
+        title: "Live market coverage",
+        body: "Tracking 18 events across 3 platforms with 7 active alerts.",
+        metric: "12 active",
+        tone: "neutral",
+      },
+    ],
+  }),
+  calibration: async (): Promise<CalibrationResponse> => {
+    const buckets = [
+      { bucket: "0-10%", predicted: 0.05, observed: 0.03, sample_size: 4 },
+      { bucket: "10-20%", predicted: 0.15, observed: 0.18, sample_size: 6 },
+      { bucket: "20-30%", predicted: 0.25, observed: 0.22, sample_size: 7 },
+      { bucket: "30-40%", predicted: 0.35, observed: 0.31, sample_size: 8 },
+      { bucket: "40-50%", predicted: 0.45, observed: 0.38, sample_size: 9 },
+      { bucket: "50-60%", predicted: 0.55, observed: 0.52, sample_size: 7 },
+      { bucket: "60-70%", predicted: 0.65, observed: 0.71, sample_size: 6 },
+      { bucket: "70-80%", predicted: 0.75, observed: 0.78, sample_size: 5 },
+      { bucket: "80-90%", predicted: 0.85, observed: 0.88, sample_size: 4 },
+      { bucket: "90-100%", predicted: 0.95, observed: 0.93, sample_size: 3 },
+    ];
+    return {
+      overall: {
+        sample_size: 5,
+        brier_score: 0.144,
+        calibration_error: 0.04,
+        bias: 0.011,
+        curve: buckets,
+      },
+      by_source: [
+        { label: "metaculus", sample_size: 1, brier_score: 0.168, calibration_error: 0.41, bias: -0.41 },
+        { label: "polymarket", sample_size: 2, brier_score: 0.118, calibration_error: 0.335, bias: 0.075 },
+        { label: "kalshi", sample_size: 2, brier_score: 0.109, calibration_error: 0.33, bias: -0.07 },
+      ],
+      by_category: [
+        { label: "economics", sample_size: 3, brier_score: 0.151, calibration_error: 0.387, bias: -0.113 },
+        { label: "technology", sample_size: 1, brier_score: 0.068, calibration_error: 0.26, bias: -0.26 },
+        { label: "sports", sample_size: 1, brier_score: 0.102, calibration_error: 0.32, bias: -0.32 },
+      ],
+      buckets,
+    };
+  },
+  alerts: async (params?: Record<string, any>): Promise<AlertsResponse> => {
+    let items = MOCK_EVENTS.filter((e) => e.signal_label !== "neutral" && e.edge_score > 0.1).map((e) => ({
+      id: `alr_${e.id}`,
+      event_id: e.id,
+      event_title: e.title,
+      event_slug: e.slug,
+      source: e.source,
+      category: e.category,
+      alert_type: e.signal_label,
+      severity:
+        e.edge_score >= 0.3 ? "critical" : e.edge_score >= 0.2 ? "high" : e.edge_score >= 0.12 ? "medium" : "low",
+      score: e.edge_score,
+      reason: e.signal_explanation,
+      edge_score: e.edge_score,
+      drift_score: e.drift_score,
+      divergence_score: e.divergence_score,
+      current_probability: e.current_probability,
+      adjusted_probability: e.adjusted_probability,
+      created_at: NOW.toISOString(),
+    }));
+    if (params?.severity) items = items.filter((a) => a.severity === params.severity);
+    if (params?.source) items = items.filter((a) => a.source === params.source);
+    if (params?.category) items = items.filter((a) => a.category === params.category);
+    items.sort((a, b) => b.score - a.score);
+    return { items, generated_at: NOW.toISOString() };
+  },
+};
